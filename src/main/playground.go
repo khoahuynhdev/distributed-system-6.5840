@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 
 	"6.5840/mr"
@@ -39,15 +40,53 @@ func ReadContent(fileName string) (string, error) {
 	return string(content), nil
 }
 
-type Worker struct {
-	filePath string
-	mut      sync.RWMutex
+type SyncWriter struct {
+	FilePath string
+	KVA      []struct {
+		Key   string
+		Value string
+	}
+	Mut sync.RWMutex
+	Ch  chan string
+	Q   chan string
 }
 
-func (w *Worker) Write(content string) {
-	w.mut.Lock()
-	defer w.mut.Unlock()
-	file, err := os.OpenFile(w.filePath, os.O_APPEND|os.O_RDWR|os.O_CREATE, 0666)
+func (w *SyncWriter) Dispatch() {
+	c, q := w.Ch, w.Q
+	for {
+		select {
+		case v := <-c:
+			// fmt.Println("Adding to dict, value: ", v)
+			w.KVA = append(w.KVA, struct {
+				Key   string
+				Value string
+			}{Key: v, Value: "1"})
+		case <-q:
+			fmt.Printf("%+v\n", w.KVA)
+			return
+		default:
+			time.Sleep(time.Second)
+		}
+	}
+}
+
+func (w *SyncWriter) GetWritePartition() (Signal func(msg string), Done func()) {
+	signal := func(msg string) {
+		w.Ch <- msg
+	}
+
+	done := func() {
+		w.Write("context")
+	}
+	return signal, done
+}
+
+// PROBLEM
+
+func (w *SyncWriter) Write(content string) {
+	w.Mut.Lock()
+	defer w.Mut.Unlock()
+	file, err := os.OpenFile(w.FilePath, os.O_APPEND|os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		fmt.Printf("Get Error opening file %v", err)
 		return
@@ -62,7 +101,7 @@ func (w *Worker) Write(content string) {
 // 3 Map Workers
 
 // (k1, v1) => [](k2,v2)
-func MapF(filename, content string, workers []*Worker) []mr.KeyValue {
+func MapF(filename, content string, writers []*SyncWriter) []mr.KeyValue {
 	kva := []mr.KeyValue{}
 	ff := func(r rune) bool { return !unicode.IsLetter(r) }
 	words := strings.FieldsFunc(content, ff)
@@ -74,26 +113,33 @@ func MapF(filename, content string, workers []*Worker) []mr.KeyValue {
 			// kva = append(kva, mr.KeyValue{Key: tw, Value: "1"})
 			// add the Keva to the right partition by hashing % RReducer
 			hashIndex := GetHash(tw) % RReducer
-			workers[hashIndex].Write(fmt.Sprintf("%s, %s", tw, "1"))
+			writers[hashIndex].Ch <- tw
 			// fmt.Printf("Append key \"%s\" with hash %d to the table\n", tw, hashIndex)
 			wg.Done()
 		}()
 		// spawn many go routine to write to mr-out-var
 	}
 	wg.Wait()
+	for _, wr := range writers {
+		wr.Q <- ""
+	}
 	return kva
 }
 
 func main() {
 	fileName := "pg-grimm.txt"
-	workers := make([]*Worker, RReducer)
+	workers := make([]*SyncWriter, RReducer)
 	for idx := range workers {
 		// file, _ := os.OpenFile(fmt.Sprintf("mr-out-%d", idx), os.O_CREATE|os.O_APPEND, 0644)
 		dir, _ := os.Getwd()
-		workers[idx] = &Worker{
-			mut:      sync.RWMutex{},
-			filePath: fmt.Sprintf(dir+"/mr-out-%d", idx),
+		workers[idx] = &SyncWriter{
+			Mut:      sync.RWMutex{},
+			FilePath: fmt.Sprintf(dir+"/mr-out-%d", idx),
+			Ch:       make(chan string),
+			Q:        make(chan string),
 		}
+
+		go workers[idx].Dispatch()
 	}
 	content, err := ReadContent(fileName)
 	if err != nil {
