@@ -70,17 +70,6 @@ func (w *SyncWriter) Dispatch() {
 	}
 }
 
-func (w *SyncWriter) GetWritePartition() (Signal func(msg string), Done func()) {
-	signal := func(msg string) {
-		w.Ch <- msg
-	}
-
-	done := func() {
-		w.Write("context")
-	}
-	return signal, done
-}
-
 // PROBLEM
 
 func (w *SyncWriter) Write(content string) {
