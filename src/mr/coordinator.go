@@ -9,6 +9,19 @@ import (
 	"os"
 )
 
+// NOTE: Need to design a state to capture
+// splits -> MMaps -> RREduces
+// 6 			-> 10 	 -> 10
+// constraint: worker won't be available and will be added gradually
+type Task struct {
+	Target string
+}
+
+// one Mapper only writes to 1 Mapfile
+type MapOutput struct {
+	File string
+}
+
 type Executor struct {
 	ID     string
 	Status string
@@ -18,22 +31,16 @@ type Coordinator struct {
 	Workers []*Executor
 }
 
-// Your code here -- RPC handlers for the worker to call.
-
-// an example RPC handler.
-//
-// the RPC argument and reply types are defined in rpc.go.
-func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
-	reply.Y = args.X + 1
-	return nil
-}
-
 func (c *Coordinator) Register(args *RegisterArgs, reply *RegisterReply) error {
 	fmt.Println("A new worker connected, ID: ", args.ID)
 	c.Workers = append(c.Workers, &Executor{
 		ID: args.ID,
 	})
 	reply.Status = "success"
+	return nil
+}
+
+func (c *Coordinator) GetTask(arg *GetTaskArg, reply *GetTaskReply) error {
 	return nil
 }
 
