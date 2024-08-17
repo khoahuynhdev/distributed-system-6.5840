@@ -18,8 +18,11 @@ type Task struct {
 }
 
 // one Mapper only writes to 1 Mapfile
-type MapOutput struct {
+type TempOutput struct {
 	File string
+	Kind string
+	// just use simple state (string) ACQUIRED | OPEN
+	// if race condition happens, use LOCK with timeout
 }
 
 type Executor struct {
