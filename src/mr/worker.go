@@ -50,15 +50,25 @@ func Worker(mapf func(string, string) []KeyValue,
 			ws.CallRegister()
 		case IDLE:
 			fmt.Println("trying to get task...")
+			ws.CallGetTask()
 			time.Sleep(2 * time.Second)
 		case BUSY:
 		}
 		time.Sleep(2 * time.Second)
 	}
-	// Your worker implementation here.
+}
 
-	// uncomment to send the Example RPC to the coordinator.
-	// CallExample()
+func (ws *WorkerState) CheckFinishTask() {
+	// if finish task, change status to idle
+	ws.Status = IDLE
+}
+
+func (ws *WorkerState) CallGetTask() {
+	// if task
+	// ws.Status = BUSY
+	// else
+	// just sleep 1 sec and
+	// continue to poll for tasks
 }
 
 func (ws *WorkerState) CallRegister() {

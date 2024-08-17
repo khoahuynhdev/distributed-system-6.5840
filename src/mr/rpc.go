@@ -24,15 +24,9 @@ type RegisterReply struct {
 	Status string
 }
 
-type ExampleArgs struct {
-	X int
-}
+type GetTaskArg struct{}
 
-type ExampleReply struct {
-	Y int
-}
-
-// Add your RPC definitions here.
+type GetTaskReply struct{}
 
 // Cook up a unique-ish UNIX-domain socket name
 // in /var/tmp, for the coordinator.
