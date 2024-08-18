@@ -53,6 +53,9 @@ func Worker(mapf func(string, string) []KeyValue,
 			ws.CallGetTask()
 			time.Sleep(2 * time.Second)
 		case BUSY:
+			fmt.Println("Doing Task...")
+			time.Sleep(5 * time.Second)
+			ws.Status = "IDLE"
 		}
 		time.Sleep(2 * time.Second)
 	}
@@ -69,6 +72,17 @@ func (ws *WorkerState) CallGetTask() {
 	// else
 	// just sleep 1 sec and
 	// continue to poll for tasks
+	// get pid of running process
+	args := GetTaskArg{}
+	reply := GetTaskReply{}
+	ok := call("Coordinator.GetTask", &args, &reply)
+	if ok {
+		fmt.Println("GetTask success")
+		if reply.File != "" {
+			ws.Status = BUSY
+			// doing tasks
+		}
+	}
 }
 
 func (ws *WorkerState) CallRegister() {

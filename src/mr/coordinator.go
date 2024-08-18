@@ -15,6 +15,7 @@ import (
 // constraint: worker won't be available and will be added gradually
 type Task struct {
 	Target string
+	Status string // AVAILABLE | ACQUIRED | DONE
 }
 
 // one Mapper only writes to 1 Mapfile
@@ -31,7 +32,10 @@ type Executor struct {
 }
 
 type Coordinator struct {
-	Workers []*Executor
+	mapTaskCh chan string
+	Workers   []*Executor
+	Tasks     []*Task
+	NReduce   int
 }
 
 func (c *Coordinator) Register(args *RegisterArgs, reply *RegisterReply) error {
@@ -43,7 +47,24 @@ func (c *Coordinator) Register(args *RegisterArgs, reply *RegisterReply) error {
 	return nil
 }
 
+func (c *Coordinator) dispatchMapTask() {
+	for _, task := range c.Tasks {
+		if task.Status == "AVAILABLE" {
+			c.mapTaskCh <- task.Target
+			task.Status = "ACQUIRED"
+		}
+	}
+	close(c.mapTaskCh)
+}
+
 func (c *Coordinator) GetTask(arg *GetTaskArg, reply *GetTaskReply) error {
+	taskTarget := <-c.mapTaskCh
+	if taskTarget != "" {
+		reply.File = taskTarget
+	} else {
+		reply.File = ""
+	}
+	reply.NReduce = c.NReduce
 	return nil
 }
 
@@ -59,6 +80,7 @@ func (c *Coordinator) server() {
 		log.Fatal("listen error:", e)
 	}
 	go http.Serve(l, nil)
+	fmt.Println("RPC server listening...")
 }
 
 // main/mrcoordinator.go calls Done() periodically to find out
@@ -75,10 +97,20 @@ func (c *Coordinator) Done() bool {
 // main/mrcoordinator.go calls this function.
 // nReduce is the number of reduce tasks to use.
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
-	c := Coordinator{
-		Workers: make([]*Executor, 0),
+	tasks := make([]*Task, len(files))
+	for idx, file := range files {
+		tasks[idx] = &Task{
+			Status: "AVAILABLE",
+			Target: file,
+		}
 	}
-
+	c := Coordinator{
+		Workers:   make([]*Executor, 0),
+		Tasks:     tasks,
+		mapTaskCh: make(chan string),
+		NReduce:   nReduce,
+	}
+	go c.dispatchMapTask()
 	c.server()
 	return &c
 }

@@ -26,7 +26,10 @@ type RegisterReply struct {
 
 type GetTaskArg struct{}
 
-type GetTaskReply struct{}
+type GetTaskReply struct {
+	File    string
+	NReduce int
+}
 
 // Cook up a unique-ish UNIX-domain socket name
 // in /var/tmp, for the coordinator.
