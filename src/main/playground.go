@@ -117,22 +117,22 @@ func MapF(filename, content string, writers []*SyncWriter) []mr.KeyValue {
 
 func main() {
 	fileName := "pg-grimm.txt"
-	workers := make([]*SyncWriter, RReducer)
-	for idx := range workers {
+	writers := make([]*SyncWriter, RReducer)
+	for idx := range writers {
 		// file, _ := os.OpenFile(fmt.Sprintf("mr-out-%d", idx), os.O_CREATE|os.O_APPEND, 0644)
 		dir, _ := os.Getwd()
-		workers[idx] = &SyncWriter{
+		writers[idx] = &SyncWriter{
 			Mut:      sync.RWMutex{},
 			FilePath: fmt.Sprintf(dir+"/mr-out-%d", idx),
 			Ch:       make(chan string),
 			Q:        make(chan string),
 		}
 
-		go workers[idx].Dispatch()
+		go writers[idx].Dispatch()
 	}
 	content, err := ReadContent(fileName)
 	if err != nil {
 		log.Fatalf("cannot open file %v", fileName)
 	}
-	MapF(fileName, content, workers)
+	MapF(fileName, content, writers)
 }
