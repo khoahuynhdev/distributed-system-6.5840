@@ -79,8 +79,12 @@ func (ws *WorkerState) CallGetTask() {
 	if ok {
 		fmt.Println("GetTask success")
 		if reply.File != "" {
+			fmt.Printf("Handling task for target: %v", reply.File)
 			ws.Status = BUSY
 			// doing tasks
+		} else {
+			fmt.Println("All tasks completed")
+			os.Exit(0)
 		}
 	}
 }
