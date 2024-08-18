@@ -28,6 +28,7 @@ type GetTaskArg struct{}
 
 type GetTaskReply struct {
 	File    string
+	ID      int
 	NReduce int
 }
 

@@ -14,6 +14,7 @@ import (
 // 6 			-> 10 	 -> 10
 // constraint: worker won't be available and will be added gradually
 type Task struct {
+	Id     int
 	Target string
 	Status string // AVAILABLE | ACQUIRED | DONE
 }
@@ -32,7 +33,8 @@ type Executor struct {
 }
 
 type Coordinator struct {
-	mapTaskCh chan string
+	mapTaskCh chan *Task
+	Phase     string
 	Workers   []*Executor
 	Tasks     []*Task
 	NReduce   int
@@ -48,21 +50,30 @@ func (c *Coordinator) Register(args *RegisterArgs, reply *RegisterReply) error {
 }
 
 func (c *Coordinator) dispatchMapTask() {
+	// TODO: assuming worker cannot crash and when a task is dispatch, it will be done successfully
+	// worker is not reporting to Coordinator
+	// TODO: implement reporting so the task is pushback to Coordinator when a worker crash
 	for _, task := range c.Tasks {
 		if task.Status == "AVAILABLE" {
-			c.mapTaskCh <- task.Target
+			c.mapTaskCh <- task
 			task.Status = "ACQUIRED"
 		}
 	}
 	close(c.mapTaskCh)
+	// when all the workers finish map task
+	// change the phase to REDUCE phase
+	// TODO: this should be change when all workers finish map tasks
+	c.Phase = "REDUCE"
 }
 
 func (c *Coordinator) GetTask(arg *GetTaskArg, reply *GetTaskReply) error {
 	taskTarget := <-c.mapTaskCh
-	if taskTarget != "" {
-		reply.File = taskTarget
+	if taskTarget != nil {
+		reply.File = taskTarget.Target
+		reply.ID = taskTarget.Id
 	} else {
 		reply.File = ""
+		reply.ID = -1
 	}
 	reply.NReduce = c.NReduce
 	return nil
@@ -102,13 +113,15 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 		tasks[idx] = &Task{
 			Status: "AVAILABLE",
 			Target: file,
+			Id:     idx,
 		}
 	}
 	c := Coordinator{
 		Workers:   make([]*Executor, 0),
 		Tasks:     tasks,
-		mapTaskCh: make(chan string),
+		mapTaskCh: make(chan *Task),
 		NReduce:   nReduce,
+		Phase:     "MAP",
 	}
 	go c.dispatchMapTask()
 	c.server()
