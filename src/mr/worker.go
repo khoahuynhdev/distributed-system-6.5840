@@ -169,6 +169,12 @@ func (w *SyncWriter) Dispatch() {
 			}{Key: v, Value: "1"})
 		case <-q:
 			fmt.Printf("file: %s, length: %d\n", w.FilePath, len(w.KVA))
+			content := ""
+			for _, v := range w.KVA {
+				content += fmt.Sprintf("%s, 1\n", v.Key)
+			}
+			w.Write(content)
+			fmt.Printf("Success write file: %s\n", w.FilePath)
 			return
 		default:
 			time.Sleep(time.Second)
@@ -176,19 +182,17 @@ func (w *SyncWriter) Dispatch() {
 	}
 }
 
-// PROBLEM
-
 func (w *SyncWriter) Write(content string) {
 	file, err := os.OpenFile(w.FilePath, os.O_APPEND|os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		fmt.Printf("Get Error opening file %v", err)
 		return
 	}
+	defer file.Close()
 	_, err = fmt.Fprintf(file, "%s%s", content, "\n")
 	if err != nil {
 		fmt.Printf("failed to write file %v", err)
 	}
-	file.Close()
 }
 
 // 3 Map Workers
