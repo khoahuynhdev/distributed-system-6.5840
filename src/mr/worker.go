@@ -55,11 +55,6 @@ func Worker(mapf func(string, string) []KeyValue,
 		case IDLE:
 			fmt.Println("trying to get task...")
 			ws.CallGetTask()
-			time.Sleep(2 * time.Second)
-		case BUSY:
-			fmt.Println("Doing Task...")
-			time.Sleep(5 * time.Second)
-			ws.Status = "IDLE"
 		}
 		time.Sleep(2 * time.Second)
 	}
@@ -85,9 +80,11 @@ func (ws *WorkerState) CallGetTask() {
 		if reply.File != "" {
 			fmt.Printf("Handling task for target: %s::id: %d\n", reply.File, reply.ID)
 			ws.Status = BUSY
+			ExecuteTask(reply.File, reply.ID, reply.NReduce)
+			ws.Status = IDLE
 			// doing tasks
 		} else {
-			fmt.Println("All tasks completed")
+			fmt.Println("Failed to get task")
 			os.Exit(0)
 		}
 	}
@@ -171,7 +168,7 @@ func (w *SyncWriter) Dispatch() {
 				Value string
 			}{Key: v, Value: "1"})
 		case <-q:
-			fmt.Printf("%+v\n", w.KVA)
+			fmt.Printf("file: %s, length: %d\n", w.FilePath, len(w.KVA))
 			return
 		default:
 			time.Sleep(time.Second)
@@ -221,13 +218,13 @@ func MapF(filename, content string, RReducer int, writers []*SyncWriter) error {
 	return nil
 }
 
-func ExecuteTask(fileName string, RReducer int) {
+func ExecuteTask(fileName string, mapperId, RReducer int) {
 	writers := make([]*SyncWriter, RReducer)
 	for idx := range writers {
 		// file, _ := os.OpenFile(fmt.Sprintf("mr-out-%d", idx), os.O_CREATE|os.O_APPEND, 0644)
 		dir, _ := os.Getwd()
 		writers[idx] = &SyncWriter{
-			FilePath: fmt.Sprintf(dir+"/mr-out-%d", idx),
+			FilePath: fmt.Sprintf(dir+"/mr-%d-%d", mapperId, idx),
 			Ch:       make(chan string),
 			Q:        make(chan string),
 		}
