@@ -83,15 +83,19 @@ func (c *Coordinator) dispatchReduceTask() {
 }
 
 func (c *Coordinator) GetTask(arg *GetTaskArg, reply *GetTaskReply) error {
-	taskTarget := <-c.mapTaskCh
-	if taskTarget != nil {
-		reply.File = taskTarget.Target
-		reply.ID = taskTarget.Id
-	} else {
-		reply.File = ""
-		reply.ID = -1
+	switch c.Phase {
+	case "MAP":
+		taskTarget := <-c.mapTaskCh
+		if taskTarget != nil {
+			reply.File = taskTarget.Target
+			reply.ID = taskTarget.Id
+		} else {
+			reply.File = ""
+			reply.ID = -1
+		}
+		reply.NReduce = c.NReduce
+	case "REDUCE":
 	}
-	reply.NReduce = c.NReduce
 	return nil
 }
 
