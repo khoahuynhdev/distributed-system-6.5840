@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/rpc"
 	"os"
+	"time"
 )
 
 // NOTE: Need to design a state to capture
@@ -33,11 +34,12 @@ type Executor struct {
 }
 
 type Coordinator struct {
-	mapTaskCh chan *Task
-	Phase     string
-	Workers   []*Executor
-	Tasks     []*Task
-	NReduce   int
+	mapTaskCh    chan *Task
+	reduceTaskCh chan string
+	Phase        string
+	Workers      []*Executor
+	Tasks        []*Task
+	NReduce      int
 }
 
 func (c *Coordinator) Register(args *RegisterArgs, reply *RegisterReply) error {
@@ -62,8 +64,22 @@ func (c *Coordinator) dispatchMapTask() {
 	close(c.mapTaskCh)
 	// when all the workers finish map task
 	// change the phase to REDUCE phase
-	// TODO: this should be change when all workers finish map tasks
+	// TODO: this should only be changed when all map tasks are finished
 	c.Phase = "REDUCE"
+}
+
+func (c *Coordinator) dispatchReduceTask() {
+	// NOTE: only distribute task when phase changes to REDUCE
+	for c.Phase != "REDUCE" {
+		time.Sleep(2 * time.Second)
+	}
+	for i := 0; i < c.NReduce; i++ {
+		task := fmt.Sprintf("mr-*-%d", i)
+		c.reduceTaskCh <- task
+	}
+	close(c.reduceTaskCh)
+	// TODO: this should only be changed when all map tasks are finished
+	c.Phase = "COMPLETE"
 }
 
 func (c *Coordinator) GetTask(arg *GetTaskArg, reply *GetTaskReply) error {
