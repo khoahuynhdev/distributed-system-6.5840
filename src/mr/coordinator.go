@@ -35,7 +35,7 @@ type Executor struct {
 
 type Coordinator struct {
 	mapTaskCh    chan *Task
-	reduceTaskCh chan string
+	reduceTaskCh chan *Task
 	Phase        string
 	Workers      []*Executor
 	Tasks        []*Task
@@ -75,7 +75,7 @@ func (c *Coordinator) dispatchReduceTask() {
 	}
 	for i := 0; i < c.NReduce; i++ {
 		task := fmt.Sprintf("mr-*-%d", i)
-		c.reduceTaskCh <- task
+		c.reduceTaskCh <- &Task{Target: task}
 	}
 	close(c.reduceTaskCh)
 	// TODO: this should only be changed when all map tasks are finished
@@ -93,9 +93,17 @@ func (c *Coordinator) GetTask(arg *GetTaskArg, reply *GetTaskReply) error {
 			reply.File = ""
 			reply.ID = -1
 		}
-		reply.NReduce = c.NReduce
 	case "REDUCE":
+		taskTarget := <-c.reduceTaskCh
+		if taskTarget != nil {
+			reply.File = taskTarget.Target
+			reply.ID = taskTarget.Id
+		} else {
+			reply.File = ""
+			reply.ID = -1
+		}
 	}
+	reply.NReduce = c.NReduce
 	return nil
 }
 
