@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/rpc"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -56,7 +57,7 @@ func Worker(mapf func(string, string) []KeyValue,
 			fmt.Println("trying to get task...")
 			ws.CallGetTask()
 		}
-		time.Sleep(2 * time.Second)
+		time.Sleep(1 * time.Second)
 	}
 }
 
@@ -80,13 +81,30 @@ func (ws *WorkerState) CallGetTask() {
 		if reply.File != "" {
 			fmt.Printf("Handling task for target: %s::id: %d\n", reply.File, reply.ID)
 			ws.Status = BUSY
-			ExecuteTask(reply.File, reply.ID, reply.NReduce)
+			ExecuteTask(reply.Kind, reply.File, reply.ID, reply.NReduce)
 			ws.Status = IDLE
 			// doing tasks
 		} else {
 			fmt.Println("Failed to get task")
 			os.Exit(0)
 		}
+	} else {
+		fmt.Println("failed to get task, will try in 1 second")
+		time.Sleep(time.Second)
+		ws.Status = IDLE
+	}
+}
+
+func ExecuteReduceTask(target string, rReduceer int) {
+	// spin a go routine to read all files match target
+	matches, err := filepath.Glob(target)
+	if err != nil {
+		fmt.Errorf("got error", err)
+	}
+	// for each matches, read all into array then sort
+	for _, match := range matches {
+		// ReadContent(match)
+		fmt.Printf("Read content from file %s", match)
 	}
 }
 
@@ -222,22 +240,29 @@ func MapF(filename, content string, RReducer int, writers []*SyncWriter) error {
 	return nil
 }
 
-func ExecuteTask(fileName string, mapperId, RReducer int) {
-	writers := make([]*SyncWriter, RReducer)
-	for idx := range writers {
-		// file, _ := os.OpenFile(fmt.Sprintf("mr-out-%d", idx), os.O_CREATE|os.O_APPEND, 0644)
-		dir, _ := os.Getwd()
-		writers[idx] = &SyncWriter{
-			FilePath: fmt.Sprintf(dir+"/mr-%d-%d", mapperId, idx),
-			Ch:       make(chan string),
-			Q:        make(chan string),
-		}
+func ExecuteTask(taskKind string, target string, mapperId, rReducer int) {
+	switch taskKind {
+	case "MAP":
+		writers := make([]*SyncWriter, rReducer)
+		for idx := range writers {
+			// file, _ := os.OpenFile(fmt.Sprintf("mr-out-%d", idx), os.O_CREATE|os.O_APPEND, 0644)
+			dir, _ := os.Getwd()
+			writers[idx] = &SyncWriter{
+				FilePath: fmt.Sprintf(dir+"/mr-%d-%d", mapperId, idx),
+				Ch:       make(chan string),
+				Q:        make(chan string),
+			}
 
-		go writers[idx].Dispatch()
+			go writers[idx].Dispatch()
+		}
+		content, err := ReadContent(target)
+		if err != nil {
+			log.Fatalf("cannot open file %v", target)
+		}
+		MapF(target, content, rReducer, writers)
+	case "REDUCE":
+		ExecuteReduceTask(target, rReducer)
+	default:
+		time.Sleep(time.Second)
 	}
-	content, err := ReadContent(fileName)
-	if err != nil {
-		log.Fatalf("cannot open file %v", fileName)
-	}
-	MapF(fileName, content, RReducer, writers)
 }
