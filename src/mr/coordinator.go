@@ -15,9 +15,10 @@ import (
 // 6 			-> 10 	 -> 10
 // constraint: worker won't be available and will be added gradually
 type Task struct {
-	Id     int
+	Kind   string // MAP | REDUCE | WAIT | EXIT
 	Target string
 	Status string // AVAILABLE | ACQUIRED | DONE
+	Id     int
 }
 
 // one Mapper only writes to 1 Mapfile
@@ -52,6 +53,7 @@ func (c *Coordinator) Register(args *RegisterArgs, reply *RegisterReply) error {
 }
 
 func (c *Coordinator) dispatchMapTask() {
+	fmt.Println("Dispatching Map task")
 	// TODO: assuming worker cannot crash and when a task is dispatch, it will be done successfully
 	// worker is not reporting to Coordinator
 	// TODO: implement reporting so the task is pushback to Coordinator when a worker crash
@@ -71,11 +73,12 @@ func (c *Coordinator) dispatchMapTask() {
 func (c *Coordinator) dispatchReduceTask() {
 	// NOTE: only distribute task when phase changes to REDUCE
 	for c.Phase != "REDUCE" {
-		time.Sleep(2 * time.Second)
+		time.Sleep(1 * time.Second)
 	}
+	fmt.Println("Start dispatching reduce task")
 	for i := 0; i < c.NReduce; i++ {
 		task := fmt.Sprintf("mr-*-%d", i)
-		c.reduceTaskCh <- &Task{Target: task}
+		c.reduceTaskCh <- &Task{Target: task, Kind: "REDUCE"}
 	}
 	close(c.reduceTaskCh)
 	// TODO: this should only be changed when all map tasks are finished
@@ -83,21 +86,25 @@ func (c *Coordinator) dispatchReduceTask() {
 }
 
 func (c *Coordinator) GetTask(arg *GetTaskArg, reply *GetTaskReply) error {
+	fmt.Println("Worker polling for task, phase: ", c.Phase)
 	switch c.Phase {
 	case "MAP":
 		taskTarget := <-c.mapTaskCh
 		if taskTarget != nil {
 			reply.File = taskTarget.Target
 			reply.ID = taskTarget.Id
+			reply.Kind = "MAP"
 		} else {
 			reply.File = ""
 			reply.ID = -1
 		}
 	case "REDUCE":
-		taskTarget := <-c.reduceTaskCh
-		if taskTarget != nil {
-			reply.File = taskTarget.Target
-			reply.ID = taskTarget.Id
+		reduceTarget := <-c.reduceTaskCh
+		fmt.Println("Send reduce task ", reduceTarget)
+		if reduceTarget != nil {
+			reply.File = reduceTarget.Target
+			reply.ID = reduceTarget.Id
+			reply.Kind = "REDUCE"
 		} else {
 			reply.File = ""
 			reply.ID = -1
@@ -125,11 +132,7 @@ func (c *Coordinator) server() {
 // main/mrcoordinator.go calls Done() periodically to find out
 // if the entire job has finished.
 func (c *Coordinator) Done() bool {
-	ret := false
-
-	// Your code here.
-
-	return ret
+	return c.Phase == "COMPLETE"
 }
 
 // create a Coordinator.
@@ -142,16 +145,19 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 			Status: "AVAILABLE",
 			Target: file,
 			Id:     idx,
+			Kind:   "MAP",
 		}
 	}
 	c := Coordinator{
-		Workers:   make([]*Executor, 0),
-		Tasks:     tasks,
-		mapTaskCh: make(chan *Task),
-		NReduce:   nReduce,
-		Phase:     "MAP",
+		Workers:      make([]*Executor, 0),
+		Tasks:        tasks,
+		mapTaskCh:    make(chan *Task),
+		reduceTaskCh: make(chan *Task),
+		NReduce:      nReduce,
+		Phase:        "MAP",
 	}
 	go c.dispatchMapTask()
+	go c.dispatchReduceTask()
 	c.server()
 	return &c
 }
